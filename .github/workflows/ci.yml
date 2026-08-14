@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  MIX_ENV: test
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: test (elixir ${{ matrix.elixir }} / otp ${{ matrix.otp }})
+
+    strategy:
+      # Both combinations run to completion. One failing tells you little about
+      # the other, and that difference is the point of having a matrix.
+      fail-fast: false
+      matrix:
+        include:
+          # Satisfies iroh_beam's declared requirement, so no warning. This is
+          # the combination that shows whether that "~> 1.20" is a real floor or
+          # merely a conservative one.
+          - elixir: "1.20.3"
+            otp: "29.0.5"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: erlef/setup-beam@v1
+        id: beam
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          # OTP and Elixir belong in the key: build artefacts are not portable
+          # between versions, and a stale hit produces confusing failures.
+          key: mix-${{ runner.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            mix-${{ runner.os }}-${{ matrix.otp }}-${{ matrix.elixir }}-
+
+      - run: mix deps.get
+
+      # Dependencies are compiled separately and without --warnings-as-errors:
+      # warnings from other people's code are not ours to fix, and failing on
+      # them would make an upstream release break this build.
+      #
+      # This also downloads iroh_beam's precompiled NIF, so it needs network.
+      # The NIF is built per OTP major, so each matrix entry pulls its own.
+      - run: mix deps.compile
+
+      - run: mix format --check-formatted
+
+      - run: mix compile --warnings-as-errors
+
+      - run: mix test
+
+      # The example scripts are real code that nothing else compiles, so a
+      # syntax error in one would otherwise only surface when someone ran it.
+      # Parsed, not executed — they open endpoints and talk to relays.
+      - name: Check example scripts parse
+        run: |
+          mix run --no-start -e '
+            for path <- Path.wildcard("examples/*.exs") do
+              path |> File.read!() |> Code.string_to_quoted!(file: path)
+              IO.puts("ok  #{path}")
+            end
+          '
+
+      # bin/ is gitignored — the wrapper is generated, not committed. Running
+      # the generator here checks it works and that what it emits is valid sh,
+      # which a committed copy could not tell us.
+      - name: Check the wrapper template parses
+        run: sh -n priv/templates/iroh-console.sh
+
+      - name: Generate the wrapper and check the result
+        run: |
+          mix iroh_console.gen.script
+          test -x bin/iroh-console
+          sh -n bin/iroh-console
