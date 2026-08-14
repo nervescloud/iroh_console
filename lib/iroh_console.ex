@@ -29,8 +29,8 @@ defmodule IrohConsole do
       fit for a fleet whose operators change.
 
     * `IrohConsole.Auth` is consulted per session, after iroh has proven the
-      peer's identity. `IrohConsole.Auth.TOTP` ships as an adapter. This is the
-      mechanism intended for general use.
+      peer's identity. `IrohConsole.Auth.TOTP` and `IrohConsole.Auth.Password`
+      ship as adapters. This is the mechanism intended for general use.
 
   An open allowlist with no auth adapter is an unauthenticated root shell, so
   `IrohConsole.Server` refuses to start in that combination unless

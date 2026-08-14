@@ -17,6 +17,12 @@ mix iroh_console.connect  ──►  iroh  ──►  relay  ──►  IrohCons
                           (direct if it works)          (real IEx)
 ```
 
+## Guides
+
+**[Your own Nerves devices](guides/nerves.md)** — end-to-end walkthrough for one
+or two personal devices, covering password auth, TOTP across several devices,
+and pinning an allowlist.
+
 ## Status
 
 A proof of concept, verified end to end: a real IEx shell, over a real relay,
@@ -89,6 +95,18 @@ mix iroh_console.gen.secret --account device-1234 --out /tmp/totp.secret
 Prints the base32 secret and an `otpauth://` URI to scan. **Give each device its
 own** — the device stores a secret that *verifies* codes, so extracting firmware
 from one device yields code generation for every device sharing it.
+
+## NervesMOTD
+
+`IrohConsole.MOTD` provides a ready-made row showing the device's endpoint id:
+
+```elixir
+config :nerves_motd, extra_rows: {IrohConsole.MOTD, :rows, []}
+```
+
+The endpoint id is what `:peer_allowlist` takes. It is *not* connectable — an id
+says who, not where — so use `[[show: :ticket]]` if you want the value that
+`bin/iroh-console` accepts.
 
 ## Configuration
 
@@ -172,6 +190,32 @@ early on the first differing byte and leaks the length of a correct prefix.
 
 An adapter needing state exports `child_spec/1`; `IrohConsole.Server` starts it
 first, so it can never be configured but not running.
+
+### Adapters that ship
+
+| | |
+|---|---|
+| `IrohConsole.Auth.Password` | a shared password. Simplest real check. |
+| `IrohConsole.Auth.TOTP` | rotating codes, RFC 6238. |
+| `IrohConsole.Auth.None` | no check. Requires `allow_unauthenticated: true`. |
+
+```elixir
+auth: {IrohConsole.Auth.Password, password_file: "/data/iroh_console/password"}
+```
+
+Prefer `:password_file` over `:password` on a device: a password in
+`config/*.exs` is compiled into the release, so it lives in your repository and
+in every build artefact you have ever shipped. `IrohConsole.Auth.Password.generate/0`
+produces a 160-bit one, and the adapter warns if the configured password is
+under 12 characters.
+
+Nothing in that adapter rate-limits guessing. One connection buys one attempt,
+so the practical ceiling is connection setup plus `:max_sessions` — enough to
+make online guessing slow, nowhere near enough to make a short password safe.
+
+Passwords do not rotate, which is the concrete way they are weaker than TOTP: a
+captured code is useless after one period, while a captured password works until
+someone changes it on the device.
 
 ### TOTP, and its limits
 
@@ -266,9 +310,10 @@ delivers — per keystroke or per line, and whether Enter arrives as CR or LF.
 | `--relay URL` | a custom relay. Repeatable. Without it, n0's relays are used — which will not reach a device configured against your own. |
 | `--relay-token TOKEN` | for a relay that requires one |
 | `--relay-only` | drop IP transports, so traffic must go via the relay. Useful when a direct path is being attempted and failing. |
-| `--code CODE` | skip the prompt. Visible in shell history; `IROH_CONSOLE_CODE` is read too and is not. |
+| `--code CODE` | skip the prompt — a TOTP code or a password, depending on the device. `--password` is an alias. Visible in shell history; `IROH_CONSOLE_CODE` is read too and is not. |
 | `--alpn ALPN` | defaults to `iroh-console/1` |
 | `--timeout MS` | connect timeout, defaults to 30000 |
+| `--identity-path PATH` | keep this client's key in a file so its endpoint id is stable. Needed if the device pins a `:peer_allowlist`. |
 
 `end_to_end.exs` runs both ends with `direct_ip: false`, so traffic has nowhere
 to go but the relay — without that, two endpoints on one host connect over

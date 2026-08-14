@@ -14,20 +14,23 @@
 
 set -e
 
-# Ask for the code here, before raw mode. Once the terminal is raw there is no
-# line editing, nothing is echoed, and Enter sends CR rather than LF — so a
+# Ask for the credential here, before raw mode. Once the terminal is raw there
+# is no line editing, nothing is echoed, and Enter sends CR rather than LF — so a
 # prompt from inside the BEAM cannot behave properly. Passed by environment
 # rather than argv, so it stays out of `ps` output.
+#
+# What to type depends on the device's auth adapter: a TOTP code, a password, or
+# nothing at all if it does not challenge.
 has_code=0
 for arg in "$@"; do
-    if [ "$arg" = "--code" ]; then
+    if [ "$arg" = "--code" ] || [ "$arg" = "--password" ]; then
         has_code=1
         break
     fi
 done
 
 if [ "$has_code" -eq 0 ] && [ -z "${IROH_CONSOLE_CODE:-}" ] && [ -t 0 ]; then
-    printf 'code (leave blank if the device does not ask for one): '
+    printf 'code or password (blank if the device asks for neither): '
     read -r code
     if [ -n "$code" ]; then
         IROH_CONSOLE_CODE="$code"

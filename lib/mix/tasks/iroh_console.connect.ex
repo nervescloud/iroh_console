@@ -17,13 +17,17 @@ defmodule Mix.Tasks.IrohConsole.Connect do
     * `--relay URL` — a custom relay. Repeatable. Without this, n0's relays are
       used, which will not reach a device configured against your own.
     * `--relay-token TOKEN` — token for a relay that requires one
-    * `--code CODE` — the TOTP code, if you would rather not be prompted. Note
-      it will be visible in your shell history; `IROH_CONSOLE_CODE` is read too
-      and does not have that problem.
+    * `--code CODE` — the credential, if you would rather not be prompted: a
+      TOTP code or a password, depending on the device's adapter.
+      `--password` is an alias. Note either is visible in your shell history;
+      `IROH_CONSOLE_CODE` is read too and does not have that problem.
     * `--alpn ALPN` — defaults to `iroh-console/1`
     * `--timeout MS` — connect timeout, defaults to 30000
     * `--relay-only` — drop IP transports, so traffic must go via the relay.
       Useful when a direct path is being attempted and failing.
+    * `--identity-path PATH` — keep this client's key in a file, so its endpoint
+      id is stable. Required if the device pins a `:peer_allowlist`; without it
+      a throwaway key is generated per connection and the id changes each time.
 
   ## Detaching
 
@@ -49,8 +53,10 @@ defmodule Mix.Tasks.IrohConsole.Connect do
     relay: :keep,
     relay_token: :string,
     code: :string,
+    password: :string,
     alpn: :string,
     timeout: :integer,
+    identity_path: :string,
     relay_only: :boolean
   ]
 
@@ -83,6 +89,7 @@ defmodule Mix.Tasks.IrohConsole.Connect do
         alpn: Keyword.get(opts, :alpn, "iroh-console/1"),
         connect_timeout: Keyword.get(opts, :timeout, 30_000),
         direct_ip: not Keyword.get(opts, :relay_only, false),
+        identity: identity(opts),
         respond: responder(opts)
       )
 
@@ -102,7 +109,7 @@ defmodule Mix.Tasks.IrohConsole.Connect do
     case code(opts) do
       nil ->
         fn _nonce ->
-          case Mix.shell().prompt("code:") do
+          case Mix.shell().prompt("code or password:") do
             nil -> {:error, :no_response}
             input -> {:ok, String.trim(input)}
           end
@@ -113,11 +120,21 @@ defmodule Mix.Tasks.IrohConsole.Connect do
     end
   end
 
+  # An operator usually wants a throwaway key; a stable one is only needed when
+  # the device pins an allowlist, so it is opt-in rather than the default.
+  defp identity(opts) do
+    case Keyword.get(opts, :identity_path) do
+      nil -> {IrohConsole.Identity.Ephemeral, []}
+      path -> {IrohConsole.Identity.File, path: path}
+    end
+  end
+
   # An empty environment variable means "not supplied" — bin/iroh-console only
   # exports it when something was typed, but treating "" as an answer would send
   # a blank code and burn a failed attempt.
   defp code(opts) do
-    case Keyword.get(opts, :code) || System.get_env("IROH_CONSOLE_CODE") do
+    case Keyword.get(opts, :code) || Keyword.get(opts, :password) ||
+           System.get_env("IROH_CONSOLE_CODE") do
       nil -> nil
       "" -> nil
       code -> String.trim(code)

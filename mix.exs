@@ -16,7 +16,8 @@ defmodule IrohConsole.MixProject do
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
-      description: "Remote IEx console for Nerves devices over an iroh peer-to-peer connection",
+      description:
+        "Remote IEx console for Elixir applications over an iroh peer-to-peer connection",
       package: package(),
       docs: docs(),
       source_url: @source_url
@@ -58,7 +59,8 @@ defmodule IrohConsole.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: ["README.md"],
+      extras: ["README.md", "guides/nerves.md"],
+      groups_for_extras: [Guides: ~r/guides\//],
       source_ref: "v#{@version}"
     ]
   end

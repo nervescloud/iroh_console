@@ -99,6 +99,52 @@ defmodule IrohConsole.ClientTest do
     end
   end
 
+  describe "the password adapter, through a real handshake" do
+    setup do
+      {:ok, device_side, operator_side} = TransportPipe.start_link()
+
+      {:ok, _session} =
+        Session.start_link(
+          handle: device_side,
+          transport: TransportPipe,
+          endpoint_id: "operator",
+          auth: {IrohConsole.Auth.Password, password: "correct horse battery staple"},
+          tty_mod: TTYFake,
+          tty_opts: [test_pid: self()]
+        )
+
+      %{side: operator_side}
+    end
+
+    test "the right password gets a shell", %{side: side} do
+      {:ok, _client} =
+        Client.start_link(
+          handle: side,
+          transport: TransportPipe,
+          owner: self(),
+          respond: fn _nonce -> {:ok, "correct horse battery staple"} end
+        )
+
+      assert_receive {:iroh_console, :ready}, 2_000
+      assert_receive {:tty_started, _tty}, 2_000
+    end
+
+    test "the wrong password gets nothing, and no shell is started", %{side: side} do
+      Process.flag(:trap_exit, true)
+
+      {:ok, _client} =
+        Client.start_link(
+          handle: side,
+          transport: TransportPipe,
+          owner: self(),
+          respond: fn _nonce -> {:ok, "hunter2"} end
+        )
+
+      assert_receive {:iroh_console, :closed, {:refused, "authentication failed"}}, 2_000
+      refute_received {:tty_started, _}
+    end
+  end
+
   describe "client and session against each other" do
     setup do
       {:ok, device_side, operator_side} = TransportPipe.start_link()
