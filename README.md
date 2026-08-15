@@ -19,9 +19,8 @@ mix iroh_console.connect  ──►  iroh  ──►  relay  ──►  IrohCons
 
 ## Guides
 
-**[Your own Nerves devices](guides/nerves.md)** — end-to-end walkthrough for one
-or two personal devices, covering password auth, TOTP across several devices,
-and pinning an allowlist.
+**[Using with Nerves devices](guides/nerves.md)**: end-to-end walkthrough covering 
+password auth, TOTP across several devices, and pinning an allowlist.
 
 ## Status
 
@@ -107,6 +106,24 @@ config :nerves_motd, extra_rows: {IrohConsole.MOTD, :rows, []}
 The endpoint id is what `:peer_allowlist` takes. It is *not* connectable — an id
 says who, not where — so use `[[show: :ticket]]` if you want the value that
 `bin/iroh-console` accepts.
+
+## NervesHub
+
+`IrohConsole.NervesHub` publishes the ticket through NervesHubLink's health
+metadata, so it is visible on the device page without needing console access:
+
+```elixir
+config :nerves_hub_link,
+  health: [
+    metadata: %{
+      "iroh_ticket" => {IrohConsole.NervesHub, :ticket, []},
+      "iroh_endpoint_id" => {IrohConsole.NervesHub, :endpoint_id, []}
+    }
+  ]
+```
+
+Values are resolved per report, so the ticket stays current as the device's
+addresses change.
 
 ## Configuration
 
