@@ -1,4 +1,4 @@
-# Your own Nerves devices
+# Using with Nerves devices
 
 A walkthrough for putting a console on one or two personal Nerves devices — a
 Pi on your desk, another at a relative's house — and connecting to them from
@@ -185,6 +185,54 @@ tree.
 
 The ticket is far too long for a banner — around 170 characters. Read it with
 `IrohConsole.Server.ticket()` when you need it, as above.
+
+### Publishing the ticket to NervesHub
+
+If your devices already run [NervesHubLink](https://hex.pm/packages/nerves_hub_link),
+you can skip the console trip above entirely. Health reports carry arbitrary
+metadata, so the ticket can travel with them and appear on the device's page:
+
+```elixir
+# config/target.exs
+config :nerves_hub_link,
+  health: [
+    metadata: %{
+      "iroh_ticket" => {IrohConsole.NervesHub, :ticket, []},
+      "iroh_endpoint_id" => {IrohConsole.NervesHub, :endpoint_id, []}
+    }
+  ]
+```
+
+This is the one thing that removes the chicken-and-egg from step 4. Without it
+you need serial or SSH access once, to read a ticket that only exists on the
+device. With it, provision the device, wait for its first health report, and
+copy the ticket from NervesHub.
+
+It also stays correct. NervesHubLink resolves each metadata value at report
+time — a value may be a literal or an `{module, function, args}` tuple — so the
+ticket is regenerated with every report rather than captured once at
+provisioning. When the device moves network and its direct addresses change, the
+published ticket follows.
+
+Both values are published because they are not interchangeable: the ticket is
+what `bin/iroh-console` takes, and the endpoint id is what `:peer_allowlist`
+takes. Before the console has started, both read `not running`.
+
+If the console runs under a name other than `IrohConsole.Server`, pass it in the
+MFA's args:
+
+```elixir
+"iroh_ticket" => {IrohConsole.NervesHub, :ticket, [[server: MyApp.Console]]}
+```
+
+The health extension has to be enabled for the device in NervesHub; see
+NervesHubLink's own documentation for that.
+
+**What you are publishing.** A ticket says where a device is, not how to get
+in — anyone reading it still has to satisfy your auth adapter. It is closer to a
+hostname than to a credential. It is also a standing invitation to try, so treat
+it as you would an internal hostname, and do not pair it with
+`allow_unauthenticated: true`.
 
 ## 5. Connect
 
