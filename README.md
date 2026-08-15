@@ -1,6 +1,6 @@
 # IrohConsole
 
-A remote IEx console for Nerves devices, over a peer-to-peer [iroh](https://iroh.computer)
+A remote IEx console for Elixir applications, over a peer-to-peer [iroh](https://iroh.computer)
 connection.
 
 A device behind NAT, on cellular, or on a network you do not control is dialled
@@ -9,24 +9,13 @@ falls back to a relay when no direct path can be established, so there is no
 port to forward, no VPN, and no inbound firewall rule.
 
 ```
-operator                                              device
-────────                                              ──────
-mix iroh_console.connect  ──►  iroh  ──►  relay  ──►  IrohConsole.Server
-                                 │                          │
-                            hole punch                    ExTTY
-                          (direct if it works)          (real IEx)
+operator                                           device
+────────                                           ──────
+bin/iroh-console  ──►  iroh  ──►  relay  ──►  IrohConsole.Server
+                        │                            │
+                    hole punch                     ExTTY
+                (direct if it works)             (real IEx)
 ```
-
-## Guides
-
-**[Using with Nerves devices](guides/nerves.md)**: end-to-end walkthrough covering 
-password auth, TOTP across several devices, and pinning an allowlist.
-
-## Status
-
-A proof of concept, verified end to end: a real IEx shell, over a real relay,
-with a TOTP handshake. Not yet used in production, and the API should be
-expected to move.
 
 ## Install
 
@@ -57,8 +46,7 @@ terminal, paste that command:
 bin/iroh-console <ticket>
 ```
 
-The same generator step applies in your own project — the wrapper is never
-committed, in this repo or yours.
+The same generator step applies in your own project.
 
 By default this uses n0's public relays and **no authentication** — anyone
 holding the ticket gets a root shell. Fine on your own machine, wrong everywhere
@@ -76,14 +64,11 @@ children = [
 ]
 ```
 
-The device needs to publish its address somewhere an operator can reach it —
-with address lookup disabled there is no ambient way to find it:
+And then print its 'ticket' (used for establishing a connection):
 
 ```elixir
 {:ok, ticket} = IrohConsole.Server.ticket()
 ```
-
-Print it at boot, or send it to your control plane.
 
 ### Generating a TOTP secret
 
@@ -94,36 +79,6 @@ mix iroh_console.gen.secret --account device-1234 --out /tmp/totp.secret
 Prints the base32 secret and an `otpauth://` URI to scan. **Give each device its
 own** — the device stores a secret that *verifies* codes, so extracting firmware
 from one device yields code generation for every device sharing it.
-
-## NervesMOTD
-
-`IrohConsole.MOTD` provides a ready-made row showing the device's endpoint id:
-
-```elixir
-config :nerves_motd, extra_rows: {IrohConsole.MOTD, :rows, []}
-```
-
-The endpoint id is what `:peer_allowlist` takes. It is *not* connectable — an id
-says who, not where — so use `[[show: :ticket]]` if you want the value that
-`bin/iroh-console` accepts.
-
-## NervesHub
-
-`IrohConsole.NervesHub` publishes the ticket through NervesHubLink's health
-metadata, so it is visible on the device page without needing console access:
-
-```elixir
-config :nerves_hub_link,
-  health: [
-    metadata: %{
-      "iroh_ticket" => {IrohConsole.NervesHub, :ticket, []},
-      "iroh_endpoint_id" => {IrohConsole.NervesHub, :endpoint_id, []}
-    }
-  ]
-```
-
-Values are resolved per report, so the ticket stays current as the device's
-addresses change.
 
 ## Configuration
 
@@ -155,10 +110,6 @@ field device a boot loop is far worse than a missing console.
 network: {:custom, [relay]}
 ```
 
-Relays do **not** mesh. A relay only delivers to endpoints in its own registry,
-so both ends must agree on one, and a single relay hostname must not be scaled
-across multiple instances.
-
 ## Security model
 
 **A session is unrestricted control of the device**, as root on most Nerves
@@ -167,11 +118,10 @@ to physical access.
 
 Access is decided at two layers:
 
-**`:peer_allowlist`** names which public keys may connect at all. It is enforced
-inside `IrohBeam.Endpoint`, below this library, so no bug here can wave a peer
-through — and an unlisted peer never reaches any Elixir code. It is fixed at
-endpoint start, so revoking someone means a restart, which makes it a poor fit
-for a fleet whose operators change.
+**`:peer_allowlist`** names which public keys may connect. It is enforced
+inside `IrohBeam.Endpoint`, below this library, so an unlisted peer never reaches 
+any Elixir code. It is fixed at endpoint start, so revoking someone means a restart, 
+which makes it a poor fit for a fleet whose operators change.
 
 **`IrohConsole.Auth`** runs per session, after iroh has cryptographically proven
 the peer's identity. This is the mechanism intended for general use: operators
@@ -208,32 +158,6 @@ early on the first differing byte and leaks the length of a correct prefix.
 An adapter needing state exports `child_spec/1`; `IrohConsole.Server` starts it
 first, so it can never be configured but not running.
 
-### Adapters that ship
-
-| | |
-|---|---|
-| `IrohConsole.Auth.Password` | a shared password. Simplest real check. |
-| `IrohConsole.Auth.TOTP` | rotating codes, RFC 6238. |
-| `IrohConsole.Auth.None` | no check. Requires `allow_unauthenticated: true`. |
-
-```elixir
-auth: {IrohConsole.Auth.Password, password_file: "/data/iroh_console/password"}
-```
-
-Prefer `:password_file` over `:password` on a device: a password in
-`config/*.exs` is compiled into the release, so it lives in your repository and
-in every build artefact you have ever shipped. `IrohConsole.Auth.Password.generate/0`
-produces a 160-bit one, and the adapter warns if the configured password is
-under 12 characters.
-
-Nothing in that adapter rate-limits guessing. One connection buys one attempt,
-so the practical ceiling is connection setup plus `:max_sessions` — enough to
-make online guessing slow, nowhere near enough to make a short password safe.
-
-Passwords do not rotate, which is the concrete way they are weaker than TOTP: a
-captured code is useless after one period, while a captured password works until
-someone changes it on the device.
-
 ### TOTP, and its limits
 
 `IrohConsole.Auth.TOTP` implements RFC 6238 via `nimble_totp`, including the
@@ -241,13 +165,12 @@ reuse prevention the RFC requires — the last accepted period is tracked, and
 verification **refuses** if the tracker is not running rather than silently
 accepting replayable codes.
 
-Two honest caveats:
+Please be aware:
 
 **It needs a clock.** Many Nerves targets have no battery-backed RTC and depend
-on NTP, and a console is most wanted when a device is unhealthy. `:drift`
-defaults to ±1 period (~±30s); a clock earlier than 2024 is reported as
-`:clock_unset` with its own log line, so it is diagnosable rather than a
-mystifying "authentication failed".
+on NTP. `:drift` defaults to ±1 period (~±30s); a clock earlier than 2024 is 
+reported as `:clock_unset` with its own log line, so it is diagnosable rather 
+than a mystifying "authentication failed".
 
 **The device holds a secret.** Anyone who extracts firmware can generate codes
 for that device. An adapter where the device holds only a *public* key —
@@ -259,8 +182,8 @@ is simply not written yet.
 
 The device's key is its name: the public half is the endpoint id that appears in
 allowlists and in whatever your control plane stores. Persistence is therefore a
-correctness requirement, not a convenience — an identity that changes on reboot
-invalidates every reference to it.
+correctness requirement, and an identity that changes on reboot invalidates every 
+reference to it.
 
 `IrohConsole.Identity.File` defaults to `/data` on Nerves, which survives
 firmware updates (the root filesystem is read-only and replaced wholesale). Off
@@ -269,8 +192,8 @@ for `:path` — a temp-dir fallback would look like it worked while issuing a ne
 identity on every boot.
 
 The key is stored **unencrypted**: iroh needs it at startup with no operator
-present. NervesKey cannot hold it — that is an ATECC608 doing ECDSA P-256, while
-iroh identities are ed25519 — so the security of that file is the security of
+present. NervesKey cannot hold it (an ATECC608 doing ECDSA P-256), while
+iroh identities are ed25519, so the security of that file is the security of
 the data partition.
 
 ## Terminal handling
@@ -327,10 +250,9 @@ delivers — per keystroke or per line, and whether Enter arrives as CR or LF.
 | `--relay URL` | a custom relay. Repeatable. Without it, n0's relays are used — which will not reach a device configured against your own. |
 | `--relay-token TOKEN` | for a relay that requires one |
 | `--relay-only` | drop IP transports, so traffic must go via the relay. Useful when a direct path is being attempted and failing. |
-| `--code CODE` | skip the prompt — a TOTP code or a password, depending on the device. `--password` is an alias. Visible in shell history; `IROH_CONSOLE_CODE` is read too and is not. |
+| `--code CODE` | skip the prompt. Visible in shell history; `IROH_CONSOLE_CODE` is read too and is not. |
 | `--alpn ALPN` | defaults to `iroh-console/1` |
 | `--timeout MS` | connect timeout, defaults to 30000 |
-| `--identity-path PATH` | keep this client's key in a file so its endpoint id is stable. Needed if the device pins a `:peer_allowlist`. |
 
 `end_to_end.exs` runs both ends with `direct_ip: false`, so traffic has nowhere
 to go but the relay — without that, two endpoints on one host connect over
@@ -352,16 +274,6 @@ surviving a session ending normally.
 Anything touching a real relay lives in `examples/`, deliberately outside the
 suite: CI should not depend on someone else's infrastructure, and it should not
 hammer yours.
-
-## Known limitations
-
-- **NAT traversal is unproven.** Everything verified so far ran both ends on one
-  host. Two machines on different networks is the outstanding test.
-- **QUIC address discovery** requires a relay that has it enabled; without it,
-  hole punching degrades and traffic stays relayed.
-- **Revoking an allowlisted operator** needs an endpoint restart, which drops
-  every live session. Do dynamic revocation in an auth adapter instead.
-- **One session, one shell.** There is no reattach — disconnecting ends it.
 
 ## License
 
