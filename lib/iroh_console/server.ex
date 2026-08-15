@@ -90,9 +90,19 @@ defmodule IrohConsole.Server do
   @spec endpoint(atom()) :: atom()
   def endpoint(name \\ __MODULE__), do: Module.concat(name, "Endpoint")
 
-  @doc "This device's address, once the endpoint is online."
+  @doc """
+  This device's address, once the endpoint is online.
+
+  Returns `{:error, :not_running}` rather than exiting when the console has not
+  started, since the callers that ask — a status banner, a health check — are
+  exactly the ones that may ask before it has.
+  """
   @spec addr(atom()) :: {:ok, struct()} | {:error, term()}
-  def addr(name \\ __MODULE__), do: IrohBeam.Endpoint.addr(endpoint(name))
+  def addr(name \\ __MODULE__) do
+    IrohBeam.Endpoint.addr(endpoint(name))
+  catch
+    :exit, _reason -> {:error, :not_running}
+  end
 
   @doc """
   A ticket an operator can connect with.

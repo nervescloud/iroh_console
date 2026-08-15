@@ -134,6 +134,16 @@ defmodule IrohConsole.ServerTest do
     end
   end
 
+  describe "addr/1 and ticket/1 when nothing is running" do
+    test "report it rather than exiting" do
+      # A status banner or health check asks exactly when the console may not
+      # have started, so a bare GenServer exit would be the wrong contract —
+      # and would make the @spec a lie.
+      assert IrohConsole.Server.addr(NotStarted) == {:error, :not_running}
+      assert IrohConsole.Server.ticket(NotStarted) == {:error, :not_running}
+    end
+  end
+
   describe "invalid configuration" do
     test "declines to start rather than crashing the application" do
       # A boot loop on a field device is far worse than a missing console.
