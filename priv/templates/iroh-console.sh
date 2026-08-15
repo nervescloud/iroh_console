@@ -14,6 +14,22 @@
 
 set -e
 
+# Compile before the terminal goes raw, and quietly. `stty raw` clears ONLCR, so
+# a newline written afterwards moves the cursor down without returning it to
+# column 0 — mix output would staircase across the screen, and a project with a
+# few noisy dependencies produces a great deal of it.
+#
+# The output is dropped rather than shown, because warnings and compilation
+# errors both go to stderr and there is no way to keep one without the other. A
+# failure prints a pointer instead; `mix compile` on its own shows the detail.
+#
+# The `mix run` form at the bottom is the other half of this: mix replays stored
+# warnings on every compile, even one where nothing changed.
+if ! mix compile >/dev/null 2>&1; then
+    echo "iroh-console: mix compile failed — run 'mix compile' to see why" >&2
+    exit 1
+fi
+
 # Ask for the credential here, before raw mode. Once the terminal is raw there
 # is no line editing, nothing is echoed, and Enter sends CR rather than LF — so a
 # prompt from inside the BEAM cannot behave properly. Passed by environment
@@ -56,4 +72,23 @@ else
     echo "iroh-console: stdin is not a terminal; input will be line-buffered" >&2
 fi
 
-mix iroh_console.connect "$@"
+# Run through `mix run` rather than calling `mix iroh_console.connect` directly.
+#
+# To find a task that lives in a dependency, mix first loads the dependency code
+# paths, and that step replays every stored compiler warning from every dep —
+# arriving after the terminal is already raw, which is what staircases. Nothing
+# passed to the task can prevent it: the replay happens while mix is still
+# working out which task to run.
+#
+# `run` is built into mix, so it is found without that step, and
+# `--no-deps-check` then loads the deps without compiling or replaying them.
+# Everything has already been compiled above, while the terminal was cooked.
+#
+# `--no-start` matters just as much: `mix run` starts the current project's
+# application by default, which for a device project means booting the endpoint,
+# its supervision tree and its watchers, all logging over the raw terminal. The
+# task only needs `:iroh_console`, which it starts for itself.
+#
+# Arguments after `--` arrive as `System.argv()`.
+mix run --no-compile --no-deps-check --no-start \
+    -e 'Mix.Task.run("iroh_console.connect", System.argv())' -- "$@"

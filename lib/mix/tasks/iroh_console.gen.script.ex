@@ -26,6 +26,12 @@ defmodule Mix.Tasks.IrohConsole.Gen.Script do
   The generated script also prompts for the TOTP code before enabling raw mode —
   once the terminal is raw there is no echo and Enter sends CR rather than LF, so
   an interactive prompt from inside the VM cannot behave properly.
+
+  For the same reason it compiles the project first, quietly, and then invokes
+  the task through `mix run`. Raw mode clears ONLCR, so anything printed after
+  it staircases down the screen instead of starting each line at column 0 — and
+  mix replays stored compiler warnings on every compile, including the
+  dependency-loading step it performs to find a task that lives in a dependency.
   """
 
   use Mix.Task
