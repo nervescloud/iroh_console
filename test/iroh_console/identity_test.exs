@@ -66,6 +66,32 @@ defmodule IrohConsole.IdentityTest do
     end
   end
 
+  describe "File.endpoint_id/1" do
+    test "names the key on disk, and goes on naming it the same thing", %{dir: dir} do
+      path = Path.join(dir, "identity")
+
+      assert {:ok, endpoint_id} = Identity.File.endpoint_id(path)
+      assert endpoint_id =~ ~r/^[0-9a-f]{64}$/
+
+      # The point of keeping the key in a file: the name outlives the process
+      # that first asked for it, so an allowlist naming it stays true.
+      assert Identity.File.endpoint_id(path) == {:ok, endpoint_id}
+    end
+
+    test "writes an identity when there is nothing there yet", %{dir: dir} do
+      path = Path.join(dir, "identity")
+
+      refute File.exists?(path)
+      assert {:ok, _endpoint_id} = Identity.File.endpoint_id(path)
+      assert File.exists?(path)
+    end
+
+    test "reports an unusable path rather than raising" do
+      assert {:error, message} = Identity.File.endpoint_id("/proc/nope/identity")
+      assert message =~ "cannot prepare"
+    end
+  end
+
   describe "Ephemeral.fetch/1" do
     test "asks iroh_beam for a throwaway key" do
       assert {:ok, :ephemeral} = Identity.Ephemeral.fetch([])

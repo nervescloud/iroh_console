@@ -185,6 +185,18 @@ allowlists and in whatever your control plane stores. Persistence is therefore a
 correctness requirement, and an identity that changes on reboot invalidates every 
 reference to it.
 
+Write one, and find out what it is called, with:
+
+```bash
+mix iroh_console.gen.identity priv/iroh_console.identity
+```
+
+Run against a path that already holds an identity, that reads it and prints its
+endpoint id rather than replacing it. Replacing it would retire a name other
+systems still point at, and since the private bytes are not meant to be read,
+the endpoint id is the only sign anything had changed. To roll one deliberately,
+delete the file and run it again.
+
 `IrohConsole.Identity.File` defaults to `/data` on Nerves, which survives
 firmware updates (the root filesystem is read-only and replaced wholesale). Off
 device there is no `/data`, and rather than invent a path it refuses and asks
@@ -242,6 +254,20 @@ delivers — per keystroke or per line, and whether Enter arrives as CR or LF.
 | `mix iroh_console.connect TICKET` | open a console |
 | `mix iroh_console.gen.script` | write `bin/iroh-console` into this project |
 | `mix iroh_console.gen.secret --account NAME` | generate a per-device TOTP secret |
+| `mix iroh_console.gen.identity PATH` | write an identity, print its endpoint id |
+| `mix iroh_console.endpoint_id PATH` | print the endpoint id an identity file carries |
+
+The last two are also on the wrapper, so one script covers both having a name
+and using it:
+
+```bash
+bin/iroh-console identity new priv/iroh_console.identity   # writes it, prints the id
+bin/iroh-console identity show priv/iroh_console.identity  # prints the id, nothing else
+```
+
+`identity show` prints the id alone, for piping, and refuses a path holding no
+identity rather than quietly creating one — a typo would otherwise answer with
+the name of a key nobody has.
 
 `connect` takes, and the wrapper passes through:
 

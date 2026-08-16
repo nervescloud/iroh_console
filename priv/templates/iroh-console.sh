@@ -6,6 +6,12 @@
 #
 # All arguments are passed through to `mix iroh_console.connect`.
 #
+# It also carries the identity subcommands, so one script covers both having a
+# name and using it:
+#
+#   bin/iroh-console identity new PATH     write an identity, print its endpoint id
+#   bin/iroh-console identity show PATH    print an existing identity's endpoint id
+#
 # This exists because the BEAM cannot put its own terminal into raw mode. Port
 # children are forked from erl_child_setup with no controlling terminal, so
 # `stty ... </dev/tty` fails from inside the VM regardless of how it was
@@ -14,21 +20,67 @@
 
 set -e
 
-# Compile before the terminal goes raw, and quietly. `stty raw` clears ONLCR, so
-# a newline written afterwards moves the cursor down without returning it to
-# column 0 — mix output would staircase across the screen, and a project with a
-# few noisy dependencies produces a great deal of it.
+usage() {
+    cat <<'USAGE'
+usage:
+  iroh-console TICKET [--relay URL] [--code CODE]  open a console on a device
+  iroh-console identity new PATH                   write an identity, print its endpoint id
+  iroh-console identity show PATH                  print an identity's endpoint id
+
+Anything that is not a subcommand is passed through to `mix iroh_console.connect`.
+USAGE
+}
+
+# Compilation, with nothing to show for it unless it fails. Both callers below
+# want this: the console because `stty raw` clears ONLCR, so anything printed
+# afterwards staircases down the screen instead of starting each line at column
+# 0; the identity subcommands because their stdout is meant to be piped, and
+# "Compiling 3 files" arriving ahead of an endpoint id spoils that.
 #
 # The output is dropped rather than shown, because warnings and compilation
 # errors both go to stderr and there is no way to keep one without the other. A
 # failure prints a pointer instead; `mix compile` on its own shows the detail.
-#
-# The `mix run` form at the bottom is the other half of this: mix replays stored
-# warnings on every compile, even one where nothing changed.
-if ! mix compile >/dev/null 2>&1; then
-    echo "iroh-console: mix compile failed — run 'mix compile' to see why" >&2
-    exit 1
-fi
+compile_quietly() {
+    if ! mix compile >/dev/null 2>&1; then
+        echo "iroh-console: mix compile failed — run 'mix compile' to see why" >&2
+        exit 1
+    fi
+}
+
+# Handled before any of the machinery below, because none of it applies: these
+# print a line and exit, so they want no credential prompt and no raw terminal.
+# exec'd, so the exit status is the task's own.
+case "${1:-}" in
+    identity)
+        shift
+        case "${1:-}" in
+            new)
+                shift
+                compile_quietly
+                exec mix iroh_console.gen.identity "$@"
+                ;;
+            show)
+                shift
+                compile_quietly
+                exec mix iroh_console.endpoint_id "$@"
+                ;;
+            *)
+                echo "iroh-console: expected 'identity new PATH' or 'identity show PATH'" >&2
+                usage >&2
+                exit 2
+                ;;
+        esac
+        ;;
+    -h | --help | help)
+        usage
+        exit 0
+        ;;
+esac
+
+# Compile while the terminal is still cooked. The `mix run` form at the bottom is
+# the other half of this: mix replays stored compiler warnings on every compile,
+# even one where nothing changed, and they would arrive with the screen raw.
+compile_quietly
 
 # Ask for the credential here, before raw mode. Once the terminal is raw there
 # is no line editing, nothing is echoed, and Enter sends CR rather than LF — so a

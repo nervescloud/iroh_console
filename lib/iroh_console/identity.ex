@@ -60,6 +60,32 @@ defmodule IrohConsole.Identity.File do
     if File.dir?(@data_dir), do: Path.join(@data_dir, @default_subpath)
   end
 
+  @doc """
+  The endpoint id of the identity at `path`, writing a new one if there is
+  nothing there yet.
+
+  The public half of the key, in its canonical 64 character hex form. This is
+  the name the endpoint answers to, so it is what goes in an allowlist or a
+  control plane, and it is the only way to tell which key a file holds — the
+  private bytes are not meant to be looked at.
+
+  Creates rather than fails on a missing file, which is what `fetch/1` does at
+  boot and what makes the answer stable from then on. Callers that must not mint
+  a key — asking what identity a path holds, rather than establishing one —
+  should check the path exists first.
+  """
+  @spec endpoint_id(Path.t()) :: {:ok, String.t()} | {:error, String.t()}
+  def endpoint_id(path) when is_binary(path) do
+    with {:ok, {:file, path}} <- fetch(path: path),
+         {:ok, secret_key} <- IrohBeam.Identity.load_or_create(path),
+         {:ok, endpoint_id} <- IrohBeam.SecretKey.endpoint_id(secret_key) do
+      {:ok, to_string(endpoint_id)}
+    else
+      {:error, %IrohBeam.Error{} = error} -> {:error, Exception.message(error)}
+      {:error, reason} when is_binary(reason) -> {:error, reason}
+    end
+  end
+
   defp ensure_parent(path) do
     dir = Path.dirname(path)
     pre_existing? = File.dir?(dir)
