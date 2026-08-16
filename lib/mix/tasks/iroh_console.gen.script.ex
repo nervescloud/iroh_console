@@ -23,6 +23,10 @@ defmodule Mix.Tasks.IrohConsole.Gen.Script do
   anyone should be expected to run. Generating a copy into your own project puts
   it where the rest of your tooling lives, and lets you commit it.
 
+  The generated script also carries `identity new` and `identity show`, which
+  write an iroh identity and read the endpoint id off one. They are dispatched
+  before any of the terminal handling, since neither needs it.
+
   The generated script also prompts for the TOTP code before enabling raw mode —
   once the terminal is raw there is no echo and Enter sends CR rather than LF, so
   an interactive prompt from inside the VM cannot behave properly.
@@ -59,6 +63,20 @@ defmodule Mix.Tasks.IrohConsole.Gen.Script do
         #{path} TICKET
 
     Any further arguments are passed through to `mix iroh_console.connect`.
+
+    The same script carries the identity commands, so having a name and using
+    one are the same tool:
+
+        #{path} identity new PATH     write an identity, print its endpoint id
+        #{path} identity show PATH    print an identity's endpoint id
+        #{path} --help                the lot, next time you need it
+
+    A client with no identity of its own is a different endpoint on every run,
+    so nothing on the far side can name it. Write one if anything needs to.
+
+    There is also, off the script:
+
+        mix iroh_console.gen.secret --account NAME   a per-device TOTP secret
     """)
   end
 
