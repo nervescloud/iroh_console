@@ -1,14 +1,14 @@
 defmodule IrohConsole.NervesHubLink do
   @moduledoc """
-  Reports this device's iroh identity to NervesHub as an external identity.
+  Reports this device's iroh identity to NervesHub as a network identity.
 
-  Implements NervesHubLink's `external_identity` extension provider contract, so
+  Implements NervesHubLink's `network_identity` extension provider contract, so
   the device's endpoint id and current ticket appear on its page in NervesHub
   without an operator having to get a console on it first.
 
       # config/target.exs
       config :nerves_hub_link,
-        external_identity: [providers: [IrohConsole.NervesHubLink]]
+        network_identity: [providers: [IrohConsole.NervesHubLink]]
 
   If the console runs under a name other than `IrohConsole.Server`:
 
@@ -24,7 +24,7 @@ defmodule IrohConsole.NervesHubLink do
   reports once per connection rather than riding along with every health report.
 
   `IrohConsole.NervesHub` remains the option for a NervesHub that predates the
-  external identity extension, since it needs nothing from the server beyond
+  network identity extension, since it needs nothing from the server beyond
   health metadata.
 
   ## What is reported

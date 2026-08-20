@@ -199,12 +199,12 @@ ticket from NervesHub.
 
 There are two ways to do it, and you only want one.
 
-#### As an external identity (preferred)
+#### As a network identity (preferred)
 
 ```elixir
 # config/target.exs
 config :nerves_hub_link,
-  external_identity: [providers: [IrohConsole.NervesHubLink]]
+  network_identity: [providers: [IrohConsole.NervesHubLink]]
 ```
 
 NervesHub records the endpoint id as the device's iroh identity, with the ticket
@@ -228,12 +228,12 @@ If the console runs under a name other than `IrohConsole.Server`:
 config :iroh_console, nerves_hub_link: [server: MyApp.Console]
 ```
 
-The `external_identity` extension has to be enabled for the product and the
+The `network_identity` extension has to be enabled for the product and the
 device in NervesHub.
 
 #### As health metadata
 
-For a NervesHub that predates the external identity extension, the ticket can
+For a NervesHub that predates the network identity extension, the ticket can
 travel as health metadata instead:
 
 ```elixir
