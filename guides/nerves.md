@@ -189,8 +189,52 @@ The ticket is far too long for a banner — around 170 characters. Read it with
 ### Publishing the ticket to NervesHub
 
 If your devices already run [NervesHubLink](https://hex.pm/packages/nerves_hub_link),
-you can skip the console trip above entirely. Health reports carry arbitrary
-metadata, so the ticket can travel with them and appear on the device's page:
+you can skip the console trip above entirely — the ticket travels to NervesHub on
+its own and appears on the device's page.
+
+This is the one thing that removes the chicken-and-egg from step 4. Without it
+you need serial or SSH access once, to read a ticket that only exists on the
+device. With it, provision the device, wait for it to connect, and copy the
+ticket from NervesHub.
+
+There are two ways to do it, and you only want one.
+
+#### As a network identity (preferred)
+
+```elixir
+# config/target.exs
+config :nerves_hub_link,
+  network_identity: [providers: [IrohConsole.NervesHubLink]]
+```
+
+NervesHub records the endpoint id as the device's iroh identity, with the ticket
+and current relays alongside it, and shows them on the device page with a copy
+button.
+
+It is recorded under the instance `iroh_console`, so if your application runs an
+iroh endpoint of its own, both can be recorded without one overwriting the other
+— write a second provider for it and give it a different instance name.
+
+This is the better option where your NervesHub supports it. The identity gets a
+real record rather than a metadata string, with the id stored separately from the
+connection details — which is what lets NervesHub answer "which of my devices
+holds this key?" later, and what a relay would ask when deciding whether to
+carry a connection. It also reports once per connection instead of riding along
+with every health report.
+
+If the console runs under a name other than `IrohConsole.Server`:
+
+```elixir
+config :iroh_console, nerves_hub_link: [server: MyApp.Console]
+```
+
+The `network_identity` extension has to be enabled for the product and the
+device in NervesHub.
+
+#### As health metadata
+
+For a NervesHub that predates the network identity extension, the ticket can
+travel as health metadata instead:
 
 ```elixir
 # config/target.exs
@@ -203,30 +247,23 @@ config :nerves_hub_link,
   ]
 ```
 
-This is the one thing that removes the chicken-and-egg from step 4. Without it
-you need serial or SSH access once, to read a ticket that only exists on the
-device. With it, provision the device, wait for its first health report, and
-copy the ticket from NervesHub.
-
-It also stays correct. NervesHubLink resolves each metadata value at report
-time — a value may be a literal or an `{module, function, args}` tuple — so the
-ticket is regenerated with every report rather than captured once at
-provisioning. When the device moves network and its direct addresses change, the
-published ticket follows.
-
 Both values are published because they are not interchangeable: the ticket is
 what `bin/iroh-console` takes, and the endpoint id is what `:peer_allowlist`
 takes. Before the console has started, both read `not running`.
 
-If the console runs under a name other than `IrohConsole.Server`, pass it in the
-MFA's args:
+If the console runs under a different name, pass it in the MFA's args:
 
 ```elixir
 "iroh_ticket" => {IrohConsole.NervesHub, :ticket, [[server: MyApp.Console]]}
 ```
 
-The health extension has to be enabled for the device in NervesHub; see
-NervesHubLink's own documentation for that.
+This needs the health extension enabled for the device instead.
+
+#### Either way, it stays correct
+
+Both resolve the value at report time rather than capturing it at provisioning,
+so when the device moves network and its direct addresses change, the published
+ticket follows.
 
 **What you are publishing.** A ticket says where a device is, not how to get
 in — anyone reading it still has to satisfy your auth adapter. It is closer to a
